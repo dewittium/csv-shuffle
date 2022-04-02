@@ -201,6 +201,7 @@ def _validate_config(config_raw: configparser.ConfigParser) -> \
         if config_raw.has_option('data_files', 'input_file_extension'):
             input_file_extension = config_raw.get('data_files',
                                                   'input_file_extension')
+            config_map['input_data_type'] = input_file_extension
         else:
             input_file_extension = None
             invalid.append('data_files.input_file_extension not defined')
@@ -217,6 +218,13 @@ def _validate_config(config_raw: configparser.ConfigParser) -> \
                                f'a readable file')
             else:
                 config_map['input_file_path'] = input_file_path
+
+        if config_raw.has_option('data_files', 'input_sheet_name'):
+            config_map['input_sheet_name'] = config_raw.get('data_files',
+                                                            'input_sheet_name')
+        elif input_file_extension == 'xlsx':
+            invalid.append('data_files.input_sheet_name must be defined '
+                           'when data_files.input_file_extension is xlsx')
 
         if config_raw.has_option('data_files', 'output_path'):
             output_path = config_raw.get('data_files', 'output_path')
