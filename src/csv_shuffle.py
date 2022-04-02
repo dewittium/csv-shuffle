@@ -159,6 +159,38 @@ def _read_config(config_path: str) -> Tuple[bool,
     return _validate_config(config_parser)
 
 
+def _read_csv_data(params: dict) -> List[List[str]]:
+    """
+    Read the rows of data in the CSV data file defined in params.
+
+    :param params:
+        Collection of runtime parameters provided by the caller that have
+        been verified and translated to a dictionary.
+    :return:
+        A list of the data rows in the input data file in the order that
+        they appear in the original data file.
+    :raise RuntimeError:
+        If there is a problem opening or reading the input file specified
+        in params as a CSV data file this exception will be raised.
+    """
+    data_rows = []
+    try:
+        with open(params['input_file_path'],
+                  'r',
+                  encoding=params['character_encoding'],
+                  errors=params['character_encoding_errors']) as in_fh:
+            csv_reader = csv.reader(in_fh,
+                                    delimiter=',',
+                                    quotechar='"')
+            for row in csv_reader:
+                data_rows.append(row)
+    except IOError as ioe:
+        raise RuntimeError(f'failed to read lines from IN_PATH '
+                           f'({params["input_file_path"]}: {ioe}')
+
+    return data_rows
+
+
 def _validate_config(config_raw: configparser.ConfigParser) -> \
         Tuple[bool, Union[str, None], Dict]:
     """
@@ -314,24 +346,17 @@ def main(params: dict) -> None:
     file.
 
     :param params:
-        Collection of runtime parameters provided by the caller.
+        Collection of runtime parameters provided by the caller that have
+        been verified and translated to a dictionary.
     :raise RuntimeError:
         Any expected exceptions will be redefined and raised in this form.
     """
-    try:
-        with open(params['input_file_path'],
-                  'r',
-                  encoding=params['character_encoding'],
-                  errors=params['character_encoding_errors']) as in_fh:
-            csv_reader = csv.reader(in_fh,
-                                    delimiter=',',
-                                    quotechar='"')
-            data_rows_in = []
-            for row in csv_reader:
-                data_rows_in.append(row)
-    except IOError as ioe:
-        raise RuntimeError(f'failed to read lines from IN_PATH '
-                           f'({params["input_file_path"]}: {ioe}')
+    if params['input_data_type'].lower() == 'csv':
+        data_rows_in = _read_csv_data(params)
+    else:
+        raise RuntimeError(f'Unknown input data type '
+                           f'({params["input_data_type"]}) provided, only '
+                           f'recognized types are (csv, xlsx)')
 
     valid_indexes, err_indexes, output_indexes = _calculate_output_indexes(
         in_headers=copy.copy(data_rows_in[0]),
