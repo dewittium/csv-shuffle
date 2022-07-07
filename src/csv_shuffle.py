@@ -228,6 +228,47 @@ def _read_xlsx_data(params: dict) -> List[List[str]]:
     return data_rows
 
 
+def _write_csv_data(data_rows: List[List[str]],
+                    data_indexes: List[int],
+                    params: dict) -> None:
+    """
+    Write the data in data_rows to the CSV data file defined in params.
+
+    :param data_rows:
+        The collection of data read from the input source organized by a
+        list of lists of strings where each individual data element
+        represents one point in the original data.
+    :param data_indexes:
+        The indexes of the data columns that will be written out in the order
+        that they will be written.
+    :param params:
+        Collection of runtime parameters provided by the caller that have
+        been verified and translated to a dictionary.
+    :raise RuntimeError:
+        Can be raised for two different reasons:
+            1) There is a problem identifying the indexes of the input
+               data that will be included in the output data.
+            2) There is a problem opening or writing data_rows to the file
+               specified in params as a CSV data file
+    """
+    try:
+        with open(params['output_file_path'],
+                  'w',
+                  encoding=params['character_encoding'],
+                  errors=params['character_encoding_errors']) as out_fh:
+            csv_writer = csv.writer(out_fh,
+                                    delimiter=',',
+                                    quotechar='"')
+            for row in data_rows:
+                data_row_out = []
+                for index in data_indexes:
+                    data_row_out.append(row[index])
+                csv_writer.writerow(data_row_out)
+    except IOError as ioe:
+        raise RuntimeError(f'failed to write CSV data lines to OUT_PATH '
+                           f'({params["output_file_path"]}: {ioe}')
+
+
 def _validate_config(config_raw: configparser.ConfigParser) -> \
         Tuple[bool, Union[str, None], Dict]:
     """
@@ -415,22 +456,12 @@ def main(params: dict) -> None:
         raise RuntimeError(f'failed to translate data_columns to data '
                            f'index numbers: {err_indexes}')
 
-    try:
-        with open(params['output_file_path'],
-                  'w',
-                  encoding=params['character_encoding'],
-                  errors=params['character_encoding_errors']) as out_fh:
-            csv_writer = csv.writer(out_fh,
-                                    delimiter=',',
-                                    quotechar='"')
-            for row in data_rows_in:
-                data_row_out = []
-                for index in output_indexes:
-                    data_row_out.append(row[index])
-                csv_writer.writerow(data_row_out)
-    except IOError as ioe:
-        raise RuntimeError(f'failed to write lines to OUT_PATH '
-                           f'({params["output_file_path"]}: {ioe}')
+    if params['input_data_type'].lower() == 'csv':
+        _write_csv_data(data_rows_in, output_indexes, params)
+    else:
+        raise RuntimeError(f'Unknown output data type '
+                           f'({params["output_data_type"]}) provided, only '
+                           f'recognized types are (csv)')
 
 
 if __name__ == '__main__':
