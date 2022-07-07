@@ -4,11 +4,12 @@ import csv
 import os
 import string
 import sys
-
 from typing import Dict, List, Tuple, Union
 
 # Values for data read and write parameters that will be used if not
 # defined in run time parameters.
+import openpyxl
+
 DEFAULT_CHARACTER_ENCODING = 'utf-8'
 DEFAULT_ENCODING_ERRORS = 'backslashreplace'
 
@@ -159,6 +160,73 @@ def _read_config(config_path: str) -> Tuple[bool,
     return _validate_config(config_parser)
 
 
+def _read_csv_data(params: dict) -> List[List[str]]:
+    """
+    Read the rows of data in the CSV data file defined in params.
+
+    :param params:
+        Collection of runtime parameters provided by the caller that have
+        been verified and translated to a dictionary.
+    :return:
+        A list of the data rows in the input data file in the order that
+        they appear in the original data file.
+    :raise RuntimeError:
+        If there is a problem opening or reading the input file specified
+        in params as a CSV data file this exception will be raised.
+    """
+    data_rows = []
+    try:
+        with open(params['input_file_path'],
+                  'r',
+                  encoding=params['character_encoding'],
+                  errors=params['character_encoding_errors']) as in_fh:
+            csv_reader = csv.reader(in_fh,
+                                    delimiter=',',
+                                    quotechar='"')
+            for row in csv_reader:
+                data_rows.append(row)
+    except IOError as ioe:
+        raise RuntimeError(f'failed to read lines from input data file '
+                           f'({params["input_file_path"]}): {ioe}')
+
+    return data_rows
+
+
+def _read_xlsx_data(params: dict) -> List[List[str]]:
+    """
+    Read the rows of data in the Excel spreadsheet defined in params.
+
+    :param params:
+        Collection of runtime parameters provided by the caller that have
+        been verified and translated to a dictionary.
+    :return:
+        A list of the data rows in the input data file in the order that
+        they appear in the original data file.
+    :raise RuntimeError:
+        If there is a problem opening or reading the input file specified
+        in params as an Excel spreadsheet this exception will be raised.
+    """
+    data_rows = []
+    try:
+        wb = openpyxl.load_workbook(params['input_file_path'],
+                                    read_only=True,
+                                    data_only=True)
+        if params['input_sheet_name'] not in wb.sheetnames:
+            raise RuntimeError(f'no sheet named '
+                               f'({params["input_sheet_name"]}) is contained '
+                               f'in input data file '
+                               f'({params["input_file_path"]})')
+        ws = wb[params['input_sheet_name']]
+
+        for row in ws.values:
+            data_rows.append(list(row))
+    except IOError as ioe:
+        raise RuntimeError(f'failed to read lines from input data file '
+                           f'({params["input_file_path"]}): {ioe}')
+
+    return data_rows
+
+
 def _validate_config(config_raw: configparser.ConfigParser) -> \
         Tuple[bool, Union[str, None], Dict]:
     """
@@ -201,6 +269,7 @@ def _validate_config(config_raw: configparser.ConfigParser) -> \
         if config_raw.has_option('data_files', 'input_file_extension'):
             input_file_extension = config_raw.get('data_files',
                                                   'input_file_extension')
+            config_map['input_data_type'] = input_file_extension
         else:
             input_file_extension = None
             invalid.append('data_files.input_file_extension not defined')
@@ -217,6 +286,13 @@ def _validate_config(config_raw: configparser.ConfigParser) -> \
                                f'a readable file')
             else:
                 config_map['input_file_path'] = input_file_path
+
+        if config_raw.has_option('data_files', 'input_sheet_name'):
+            config_map['input_sheet_name'] = config_raw.get('data_files',
+                                                            'input_sheet_name')
+        elif input_file_extension == 'xlsx':
+            invalid.append('data_files.input_sheet_name must be defined '
+                           'when data_files.input_file_extension is xlsx')
 
         if config_raw.has_option('data_files', 'output_path'):
             output_path = config_raw.get('data_files', 'output_path')
@@ -306,24 +382,22 @@ def main(params: dict) -> None:
     file.
 
     :param params:
-        Collection of runtime parameters provided by the caller.
+        Collection of runtime parameters provided by the caller that have
+        been verified and translated to a dictionary.
     :raise RuntimeError:
         Any expected exceptions will be redefined and raised in this form.
     """
-    try:
-        with open(params['input_file_path'],
-                  'r',
-                  encoding=params['character_encoding'],
-                  errors=params['character_encoding_errors']) as in_fh:
-            csv_reader = csv.reader(in_fh,
-                                    delimiter=',',
-                                    quotechar='"')
-            data_rows_in = []
-            for row in csv_reader:
-                data_rows_in.append(row)
-    except IOError as ioe:
-        raise RuntimeError(f'failed to read lines from IN_PATH '
-                           f'({params["input_file_path"]}: {ioe}')
+    if params['input_data_type'].lower() == 'csv':
+        data_rows_in = _read_csv_data(params)
+    elif params['input_data_type'].lower() == 'xlsx':
+        data_rows_in = _read_xlsx_data(params)
+    else:
+        raise RuntimeError(f'Unknown input data type '
+                           f'({params["input_data_type"]}) provided, only '
+                           f'recognized types are (csv, xlsx)')
+    if len(data_rows_in) == 0:
+        raise RuntimeError(f'Failed to read any data rows from input data '
+                           f'file ({params["input_file_path"]}')
 
     valid_indexes, err_indexes, output_indexes = _calculate_output_indexes(
         in_headers=copy.copy(data_rows_in[0]),
