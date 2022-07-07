@@ -220,6 +220,7 @@ def _read_xlsx_data(params: dict) -> List[List[str]]:
 
         for row in ws.values:
             data_rows.append(list(row))
+        wb.close()
     except IOError as ioe:
         raise RuntimeError(f'failed to read lines from input data file '
                            f'({params["input_file_path"]}): {ioe}')
