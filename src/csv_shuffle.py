@@ -318,6 +318,14 @@ def _validate_config(config_raw: configparser.ConfigParser) -> \
             output_file_extension = None
             invalid.append('data_files.output_file_extension not defined')
 
+        if config_raw.has_option('data_files', 'output_sheet_name'):
+            config_map['output_sheet_name'] = config_raw.get(
+                'data_files',
+                'output_sheet_name')
+        elif output_file_extension == 'xlsx':
+            invalid.append('data_files.output_sheet_name must be defined '
+                           'when data_files.output_file_extension is xlsx')
+
         if ((output_path is not None) and
                 (output_file_name is not None) and
                 (output_file_extension is not None)):
